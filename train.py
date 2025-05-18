@@ -13,17 +13,19 @@ import matplotlib.pyplot as plt
 
 # --- A. 配置参数 ---
 # 数据相关
-NUM_MFCC_COEFFS = 10        # MFCC系数数量 (为示例简化)
-MAX_FRAMES = 20             # MFCC序列的最大帧数 (为示例简化)
-NUM_CLASSES = 3             # 要识别的类别数量
-NUM_SAMPLES_PER_CLASS = 5   # 每个类别生成的样本数量 (为示例简化)
+NUM_MFCC_COEFFS = 12        # MFCC系数数量 (为示例简化)
+MAX_FRAMES = 80             # MFCC序列的最大帧数 (为示例简化)
+NUM_CLASSES = 5            # 要识别的类别数量
+NUM_SAMPLES_PER_CLASS = 100   # 每个类别生成的样本数量 (为示例简化)
 TOTAL_SAMPLES = NUM_CLASSES * NUM_SAMPLES_PER_CLASS
 
 # 训练相关
-BATCH_SIZE = 4
-EPOCHS = 15                 # 训练轮数 (为示例简化)
-LEARNING_RATE = 0.001
-VALIDATION_SPLIT = 0.2      # 从训练数据中分出验证集的比例
+BATCH_SIZE = 20
+EPOCHS = 40           # 训练轮数 (为示例简化)
+LEARNING_RATE = 0.0005
+DROPOUT_RATE = 0.3         # 新增正则化参数
+WEIGHT_DECAY = 1e-4        # 新增权重衰减
+VALIDATION_SPLIT = 0.15      # 从训练数据中分出验证集的比例
 
 # 路径相关
 BASE_DATA_DIR = 'complete_npy_dataset' # 保存.npy文件的根目录
@@ -114,7 +116,8 @@ def build_model(input_shape, num_classes_model):
     """构建一个简单的CNN模型"""
     model = Sequential([
         Input(shape=input_shape, name='input_mfcc'),
-        Conv1D(filters=16, kernel_size=3, activation='relu', padding='same'),
+        Conv1D(filters=16, kernel_size=5, activation='relu', padding='same',
+               kernel_regularizer=tf.keras.regularizers.l2(WEIGHT_DECAY*2)),
         BatchNormalization(),
         MaxPooling1D(pool_size=2),
         Dropout(0.1),
@@ -122,11 +125,12 @@ def build_model(input_shape, num_classes_model):
         Conv1D(filters=32, kernel_size=3, activation='relu', padding='same'),
         BatchNormalization(),
         MaxPooling1D(pool_size=2),
-        Dropout(0.1),
+        Dropout(DROPOUT_RATE),
 
         GlobalAveragePooling1D(),
-        Dense(16, activation='relu'),
-        Dropout(0.2),
+        Dense(16, activation='relu',
+              kernel_regularizer=tf.keras.regularizers.l2(WEIGHT_DECAY)),
+        Dropout(0.5),
         Dense(num_classes_model, activation='softmax', name='output_dense')
     ])
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE),
@@ -153,13 +157,13 @@ if __name__ == '__main__':
     # 1. 生成并保存 .npy 样例数据
     # 注意：generate_and_save_npy_samples 返回的 features/labels 在这里仅用于演示，
     # 实际训练将从文件加载。
-    _, _ = generate_and_save_npy_samples(
-        BASE_DATA_DIR,
-        NUM_CLASSES,
-        NUM_SAMPLES_PER_CLASS,
-        NUM_MFCC_COEFFS,
-        MAX_FRAMES
-    )
+    # _, _ = generate_and_save_npy_samples(
+    #     BASE_DATA_DIR,
+    #     NUM_CLASSES,
+    #     NUM_SAMPLES_PER_CLASS,
+    #     NUM_MFCC_COEFFS,
+    #     MAX_FRAMES
+    # )
 
     # 2. 从 .npy 文件加载数据
     X_data, y_labels_int = load_data_from_npy_files(
@@ -210,7 +214,7 @@ if __name__ == '__main__':
     model.summary()
 
     print("\n开始训练模型...")
-    early_stopping = EarlyStopping(monitor='val_loss' if validation_data_for_fit else 'loss', patience=5, restore_best_weights=True, verbose=1)
+    early_stopping = EarlyStopping(monitor='val_loss' if validation_data_for_fit else 'loss', patience=10, restore_best_weights=True, verbose=1)
 
     history = model.fit(X_train, y_train,
                         epochs=EPOCHS,
@@ -238,18 +242,18 @@ if __name__ == '__main__':
 
         plt.figure(figsize=(12, 5))
         plt.subplot(1, 2, 1)
-        if acc: plt.plot(epochs_range, acc, label='训练准确率')
-        if val_acc: plt.plot(epochs_range, val_acc, label='验证准确率')
+        if acc: plt.plot(epochs_range, acc, label='Training Accuracy')
+        if val_acc: plt.plot(epochs_range, val_acc, label='Validation Accuracy')
         if acc or val_acc: plt.legend(loc='lower right')
-        plt.title('准确率')
+        plt.title('Accuracy')
         plt.xlabel('Epochs')
         plt.ylabel('Accuracy')
 
         plt.subplot(1, 2, 2)
-        if loss: plt.plot(epochs_range, loss, label='训练损失')
-        if val_loss: plt.plot(epochs_range, val_loss, label='验证损失')
+        if loss: plt.plot(epochs_range, loss, label='Training Loss')
+        if val_loss: plt.plot(epochs_range, val_loss, label='Validation Loss')
         if loss or val_loss: plt.legend(loc='upper right')
-        plt.title('损失')
+        plt.title('Loss')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
 
